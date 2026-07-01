@@ -117,10 +117,7 @@ export default {
       });
 
       // --- 5) Confirm to the user who ran /escalate ---
-      await InteractionHelper.safeEditReply(interaction, {
-        content:
-          ''
-      });
+      
 
       logger.info('Escalate command executed', {
         userId: interaction.user.id,
