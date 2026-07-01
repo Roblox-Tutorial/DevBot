@@ -57,16 +57,21 @@ export default {
 
             const sanitized = sanitizeMarkdown(message);
 
-            // Création de l'embed pour l'utilisateur ciblé
+            // Génération de l'embed via votre utilitaire
             const userEmbed = successEmbed(
                 anonymous ? "Message from the Staff Team" : `Message from ${interaction.user.tag}`,
                 sanitized
             );
 
-            // Ajout du footer directement sur l'embed généré
-            userEmbed.setFooter({
-                text: `You cannot reply to this message. | Logger ID: ${interaction.id}`
-            });
+            // FORCE L'INJECTION DU FOOTER (Gère à la fois l'objet EmbedBuilder de Discord.js et les objets JSON bruts)
+            const footerText = `You cannot reply to this message. | Logger ID: ${interaction.id}`;
+            if (typeof userEmbed.setFooter === 'function') {
+                userEmbed.setFooter({ text: footerText });
+            } else if (userEmbed.data) {
+                userEmbed.data.footer = { text: footerText };
+            } else {
+                userEmbed.footer = { text: footerText };
+            }
 
             const dmChannel = await targetUser.createDM();
             await dmChannel.send({ embeds: [userEmbed] });
@@ -84,7 +89,7 @@ export default {
                         userId: targetUser.id,
                         moderatorId: interaction.user.id,
                         moderatorTag: interaction.user.tag,
-                        messageContent: message, // Ajout du message textuel envoyé
+                        messageContent: message,
                         anonymous,
                         messageLength: sanitized.length
                     }
@@ -102,7 +107,6 @@ export default {
         } catch (error) {
             logger.error('DM command error:', error);
             
-            // Correction des syntaxes de chaînes (${var}) avec des accents graves (`)
             if (error.code === 50007) {
                 return await replyUserError(interaction, { type: ErrorTypes.UNKNOWN, message: `Could not send a DM to ${targetUser.tag}. They may have DMs disabled.` });
             }
