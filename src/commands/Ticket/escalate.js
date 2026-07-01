@@ -1,14 +1,13 @@
-import { SlashCommandBuilder } from 'discord.js';
+import { SlashCommandBuilder, PermissionsBitField } from 'discord.js';
 import { createEmbed } from '../../utils/embeds.js';
 import { logger } from '../../utils/logger.js';
 import { handleInteractionError } from '../../utils/errorHandler.js';
 import { InteractionHelper } from '../../utils/interactionHelper.js';
 
-// Put your actual role ID here (Moderation Department)
-const MOD_DEPARTMENT_ROLE_ID = '1506843456943689798';
-
-// Optional: if all ticket channels are in one category, put that ID here
-const TICKET_CATEGORY_ID = '1506636010866479114';
+// IDs to configure for your server
+const SUPPORT_ROLE_ID = '111111111111111111';       // Support role ID
+const MOD_DEPARTMENT_ROLE_ID = '222222222222222222'; // Moderation Department role ID
+const TICKET_CATEGORY_ID = '333333333333333333';     // Ticket category ID (optional)
 
 export default {
   data: new SlashCommandBuilder()
@@ -53,15 +52,30 @@ export default {
         return;
       }
 
-      // --- Get Moderation Department role ---
+      // --- Get roles ---
+      const supportRole =
+        guild.roles.cache.get(SUPPORT_ROLE_ID) ||
+        guild.roles.cache.find((r) => r.id === SUPPORT_ROLE_ID);
+
       const modRole =
         guild.roles.cache.get(MOD_DEPARTMENT_ROLE_ID) ||
-        guild.roles.cache.find((r) => r.name === 'Moderation Department');
+        guild.roles.cache.find((r) => r.id === MOD_DEPARTMENT_ROLE_ID);
+
+      if (!supportRole) {
+        await InteractionHelper.safeEditReply(interaction, {
+          content: 'Support role not found. Please check the configuration.'
+        });
+
+        logger.error('Support role not found for escalate command', {
+          guildId: interaction.guildId,
+          commandName: 'escalate'
+        });
+        return;
+      }
 
       if (!modRole) {
         await InteractionHelper.safeEditReply(interaction, {
-          content:
-            'Moderation Department role not found. Please check the configuration.'
+          content: 'Moderation Department role not found. Please check the configuration.'
         });
 
         logger.error('Moderation Department role not found for escalate command', {
@@ -71,30 +85,51 @@ export default {
         return;
       }
 
-      // --- Build embed for the ticket channel ---
+      // --- 1) Remove support role permissions in this ticket channel ---
+      await channel.permissionOverwrites.edit(supportRole, {
+        ViewChannel: false,
+        SendMessages: false
+      });
+
+      // --- 2) Add moderation department permissions in this ticket channel ---
+      await channel.permissionOverwrites.edit(modRole, {
+        ViewChannel: true,
+        SendMessages: true,
+        ReadMessageHistory: true
+      });
+
+      // --- 3) Add letter "a" to the ticket channel name ---
+      const currentName = channel.name || 'ticket';
+      const newName = currentName + 'a';
+
+      await channel.setName(newName, 'Escalated ticket to moderation department');
+
+      // --- 4) Build embed + notify moderation in the ticket channel ---
       const embed = createEmbed({
         title: 'Ticket escalated'
       }).setDescription(
-        `This ticket has been escalated to ${modRole}.`
+        `This ticket has been escalated to ${modRole}.\nSupport has been removed from this ticket and the channel name has been updated to \`${newName}\`.`
       );
 
-      // --- Notify moderation department in the ticket channel ---
       await channel.send({
         content: `<@&${modRole.id}>`,
         embeds: [embed]
       });
 
-      // --- Confirm to the user who ran /escalate ---
+      // --- 5) Confirm to the user who ran /escalate ---
       await InteractionHelper.safeEditReply(interaction, {
         content:
-          'Command ran successfully. The moderation department has been notified.'
+          'Command ran successfully. The moderation department has been notified and ticket permissions/name have been updated.'
       });
 
       logger.info('Escalate command executed', {
         userId: interaction.user.id,
         guildId: interaction.guildId,
         channelId: channel.id,
+        supportRoleId: supportRole.id,
         modRoleId: modRole.id,
+        oldChannelName: currentName,
+        newChannelName: newName,
         commandName: 'escalate'
       });
     } catch (error) {
