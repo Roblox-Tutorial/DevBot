@@ -1,150 +1,126 @@
-import { SlashCommandBuilder, PermissionsBitField } from 'discord.js';
-import { createEmbed } from '../../utils/embeds.js';
+import { getColor } from '../../config/bot.js';
+import { SlashCommandBuilder, PermissionFlagsBits, MessageFlags } from 'discord.js';
+import { successEmbed } from '../../utils/embeds.js';
 import { logger } from '../../utils/logger.js';
 import { handleInteractionError } from '../../utils/errorHandler.js';
 import { InteractionHelper } from '../../utils/interactionHelper.js';
-
-// IDs to configure for your server
-const SUPPORT_ROLE_ID = '1506631605576270004';       // Support role ID
-const MOD_DEPARTMENT_ROLE_ID = '1506843456943689798'; // Moderation Department role ID
-const TICKET_CATEGORY_ID = '1506636010866479114';     // Ticket category ID (optional)
+import { getTicketPermissionContext } from '../../utils/ticketPermissions.js';
 
 export default {
   data: new SlashCommandBuilder()
-    .setName('escalate')
-    .setDescription('Escalate this ticket to the moderation department'),
+    .setName("escalate")
+    .setDescription("Escalates a claimed ticket to the moderation department.")
+    .setDMPermission(false),
 
-  async execute(interaction) {
+  async execute(interaction, guildConfig, client) {
     try {
-      const deferSuccess = await InteractionHelper.safeDefer(interaction);
-      if (!deferSuccess) {
-        logger.warn('Escalate interaction defer failed', {
-          userId: interaction.user.id,
-          guildId: interaction.guildId,
-          commandName: 'escalate'
-        });
+      const deferred = await InteractionHelper.safeDefer(interaction, {
+        flags: MessageFlags.Ephemeral
+      });
+      if (!deferred) {
         return;
+      }
+
+      const permissionContext = await getTicketPermissionContext({ client, interaction });
+      if (!permissionContext.ticketData) {
+        return await InteractionHelper.safeEditReply(interaction, {
+          content: 'This command can only be used in a valid ticket channel.'
+        });
+      }
+
+      if (!permissionContext.canManageTicket) {
+        return await InteractionHelper.safeEditReply(interaction, {
+          content: 'You need the `Manage Channels` permission or the configured `Ticket Staff Role` to escalate tickets.'
+        });
       }
 
       const channel = interaction.channel;
       const guild = interaction.guild;
 
-      // --- Ticket detection logic (adjust to your system) ---
-      const isTicketByCategory =
-        TICKET_CATEGORY_ID && channel.parentId === TICKET_CATEGORY_ID;
+      const supportRoleId = guildConfig?.supportRoleId || '1506631605576270004';
+      const modRoleId = guildConfig?.modDepartmentRoleId || '1506843456943689798';
 
-      const isTicketByName =
-        channel.name && channel.name.toLowerCase().startsWith('ticket-');
-
-      const isTicketChannel = isTicketByCategory || isTicketByName;
-
-      if (!isTicketChannel) {
-        await InteractionHelper.safeEditReply(interaction, {
-          content: 'This command can only be used in ticket channels.'
-        });
-
-        logger.info('Escalate command used outside ticket channel', {
-          userId: interaction.user.id,
-          guildId: interaction.guildId,
-          channelId: channel.id,
-          commandName: 'escalate'
-        });
-        return;
-      }
-
-      // --- Get roles ---
-      const supportRole =
-        guild.roles.cache.get(SUPPORT_ROLE_ID) ||
-        guild.roles.cache.find((r) => r.id === SUPPORT_ROLE_ID);
-
-      const modRole =
-        guild.roles.cache.get(MOD_DEPARTMENT_ROLE_ID) ||
-        guild.roles.cache.find((r) => r.id === MOD_DEPARTMENT_ROLE_ID);
+      const supportRole = guild.roles.cache.get(supportRoleId);
+      const modRole = guild.roles.cache.get(modRoleId);
 
       if (!supportRole) {
-        await InteractionHelper.safeEditReply(interaction, {
-          content: 'Support role not found. Please check the configuration.'
+        return await InteractionHelper.safeEditReply(interaction, {
+          content: 'Support role not found.'
         });
-
-        logger.error('Support role not found for escalate command', {
-          guildId: interaction.guildId,
-          commandName: 'escalate'
-        });
-        return;
       }
 
       if (!modRole) {
-        await InteractionHelper.safeEditReply(interaction, {
-          content: 'Moderation Department role not found. Please check the configuration.'
+        return await InteractionHelper.safeEditReply(interaction, {
+          content: 'Moderation Department role not found.'
         });
-
-        logger.error('Moderation Department role not found for escalate command', {
-          guildId: interaction.guildId,
-          commandName: 'escalate'
-        });
-        return;
       }
 
-      // --- 1) Remove support role permissions in this ticket channel ---
-      await channel.permissionOverwrites.edit(supportRole, {
-        ViewChannel: false,
-        SendMessages: false
+      const claimOverwrite = channel.permissionOverwrites.cache.find((overwrite) => {
+        if (overwrite.type !== 1) return false;
+        const allow = overwrite.allow?.bitfield?.toString?.() ?? '';
+        const deny = overwrite.deny?.bitfield?.toString?.() ?? '';
+        return overwrite.id !== guild.id && overwrite.id !== supportRole.id && overwrite.id !== modRole.id && (allow.length > 0 || deny.length > 0);
       });
 
-      // --- 2) Add moderation department permissions in this ticket channel ---
+      if (claimOverwrite) {
+        await claimOverwrite.delete('Ticket escalated and unclaimed');
+      }
+
+      await channel.permissionOverwrites.edit(supportRole, {
+        ViewChannel: false,
+        SendMessages: false,
+        ReadMessageHistory: false
+      }, { reason: 'Ticket escalated to moderation' });
+
       await channel.permissionOverwrites.edit(modRole, {
         ViewChannel: true,
         SendMessages: true,
         ReadMessageHistory: true
-      });
+      }, { reason: 'Ticket escalated to moderation' });
 
-      // --- 3) Add letter "a" to the ticket channel name ---
       const currentName = channel.name || 'ticket';
-      const newName = currentName + 'mod';
+      const newName = currentName.endsWith('mod') ? currentName : `${currentName}mod`;
 
-      await channel.setName(newName, 'Escalated ticket to moderation department');
-
-      // --- 4) Build embed + notify moderation in the ticket channel ---
-      const embed = createEmbed({
-        title: 'Ticket escalated'
-      }).setDescription(
-        `This ticket has been escalated to the ${modRole}.`
-      );
+      if (newName !== currentName) {
+        await channel.setName(newName, 'Ticket escalated to moderation department');
+      }
 
       await channel.send({
         content: `<@&${modRole.id}>`,
-        embeds: [embed]
+        embeds: [
+          successEmbed(
+            'Ticket Escalated',
+            'This ticket has been escalated to the moderation department.'
+          )
+        ]
       });
 
-      // --- 5) Confirm to the user who ran /escalate ---
-       await InteractionHelper.safeEditReply(interaction, {
-        content:
-          'Ticket escalated.'
+      await InteractionHelper.safeEditReply(interaction, {
+        content: 'Ticket escalated successfully.'
       });
 
-      logger.info('Escalate command executed', {
+      logger.info('Ticket escalated successfully', {
         userId: interaction.user.id,
-        guildId: interaction.guildId,
+        userTag: interaction.user.tag,
         channelId: channel.id,
-        supportRoleId: supportRole.id,
-        modRoleId: modRole.id,
-        oldChannelName: currentName,
-        newChannelName: newName,
+        channelName: channel.name,
+        guildId: interaction.guildId,
         commandName: 'escalate'
       });
     } catch (error) {
-      logger.error('Escalate command execution failed', {
+      logger.error('Error executing escalate command', {
         error: error.message,
         stack: error.stack,
         userId: interaction.user.id,
+        channelId: interaction.channel?.id,
         guildId: interaction.guildId,
         commandName: 'escalate'
       });
 
       await handleInteractionError(interaction, error, {
         commandName: 'escalate',
-        source: 'escalate_command'
+        source: 'ticket_escalate_command'
       });
     }
-  }
+  },
 };
