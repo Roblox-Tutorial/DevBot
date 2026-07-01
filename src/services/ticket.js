@@ -252,6 +252,14 @@ export async function closeTicket(channel, closer, reason = 'No reason provided'
     
     await saveTicketData(channel.guild.id, channel.id, ticketData);
 
+    let transcriptAttachment = null;
+
+try {
+  transcriptAttachment = await generateTranscript(channel);
+} catch (error) {
+  logger.warn(`Transcript failed for ${channel.id}: ${error.message}`);
+}
+
     if (closedCategoryId && channel.parentId !== closedCategoryId) {
       const closedCategory = channel.guild.channels.cache.get(closedCategoryId)
         || await channel.guild.channels.fetch(closedCategoryId).catch(() => null);
@@ -410,6 +418,24 @@ components: []
         }
       }
     });
+
+    const transcriptChannelId = '1521967483362480269';
+
+if (transcriptAttachment) {
+  try {
+    const logChannel = channel.guild.channels.cache.get(transcriptChannelId)
+      || await channel.guild.channels.fetch(transcriptChannelId).catch(() => null);
+
+    if (logChannel) {
+      await logChannel.send({
+        content: `📜 Transcript for ticket **${ticketData.id}** closed by <@${closer.id}>`,
+        files: [transcriptAttachment]
+      });
+    }
+  } catch (error) {
+    logger.warn(`Failed to send transcript: ${error.message}`);
+  }
+}
     
     return { success: true, ticketData };
     
