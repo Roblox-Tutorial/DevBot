@@ -952,7 +952,11 @@ export async function unclaimTicket(channel, unclaimer, force = false) {
       };
     }
     
-    if (ticketData.claimedBy !== unclaimer.id && !unclaimer.permissions.has(PermissionFlagsBits.ManageChannels)) {
+    if (
+      !force &&
+      ticketData.claimedBy !== unclaimer.id &&
+      !unclaimer.permissions.has(PermissionFlagsBits.ManageChannels)
+    ) {
       return { 
         success: false, 
         error: 'You can only unclaim your own tickets or need Manage Channels permission.' 
