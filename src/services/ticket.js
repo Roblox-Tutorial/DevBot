@@ -938,7 +938,7 @@ export async function deleteTicket(channel, deleter) {
   }
 }
 
-export async function unclaimTicket(channel, unclaimer) {
+export async function unclaimTicket(channel, unclaimer, force = false) {
   try {
     const ticketData = await getTicketData(channel.guild.id, channel.id);
     if (!ticketData) {
