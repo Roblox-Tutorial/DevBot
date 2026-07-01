@@ -5,11 +5,12 @@ import { logger } from '../../utils/logger.js';
 import { handleInteractionError } from '../../utils/errorHandler.js';
 import { InteractionHelper } from '../../utils/interactionHelper.js';
 import { getTicketPermissionContext } from '../../utils/ticketPermissions.js';
+import { unclaimTicket } from '../../services/ticket.js'; // <-- adjust path if needed
 
 export default {
   data: new SlashCommandBuilder()
-    .setName("escalate")
-    .setDescription("Escalates the current ticket to the moderation department.")
+    .setName('escalate')
+    .setDescription('Escalates the current ticket to the moderation department.')
     .setDMPermission(false),
 
   async execute(interaction, guildConfig, client) {
@@ -19,7 +20,11 @@ export default {
       });
       if (!deferred) return;
 
-      const permissionContext = await getTicketPermissionContext({ client, interaction });
+      const permissionContext = await getTicketPermissionContext({
+        client,
+        interaction
+      });
+
       if (!permissionContext.ticketData) {
         return await InteractionHelper.safeEditReply(interaction, {
           content: 'This command can only be used in a valid ticket channel.'
@@ -28,20 +33,27 @@ export default {
 
       if (!permissionContext.canManageTicket) {
         return await InteractionHelper.safeEditReply(interaction, {
-          content: 'You need the `Manage Channels` permission or the configured `Ticket Staff Role` to escalate tickets.'
+          content:
+            'You need the `Manage Channels` permission or the configured `Ticket Staff Role` to escalate tickets.'
         });
       }
 
       const channel = interaction.channel;
       const guild = interaction.guild;
 
-      const supportRoleId = guildConfig?.supportRoleId || '1506631605576270004';
-      const modRoleId = guildConfig?.modDepartmentRoleId || '1506843456943689798';
-      const ticketCategoryId = guildConfig?.ticketCategoryId || '1506636010866479114';
+      const supportRoleId =
+        guildConfig?.supportRoleId || '1506631605576270004';
+
+      const modRoleId =
+        guildConfig?.modDepartmentRoleId || '1506843456943689798';
+
+      const ticketCategoryId =
+        guildConfig?.ticketCategoryId || '1506636010866479114';
 
       if (!channel || !guild) {
         return await InteractionHelper.safeEditReply(interaction, {
-          content: 'This command can only be used in a guild ticket channel.'
+          content:
+            'This command can only be used in a guild ticket channel.'
         });
       }
 
@@ -51,7 +63,8 @@ export default {
 
       if (!isTicketChannel) {
         return await InteractionHelper.safeEditReply(interaction, {
-          content: 'This command can only be used in a valid ticket channel.'
+          content:
+            'This command can only be used in a valid ticket channel.'
         });
       }
 
@@ -71,16 +84,34 @@ export default {
       }
 
       const ticketData = permissionContext.ticketData;
+
       const claimedUserId =
         ticketData.claimedBy ||
         ticketData.claimedUserId ||
         ticketData.claimantId ||
         ticketData.claimed;
 
+      // Automatically force-unclaim the ticket.
       if (claimedUserId) {
-        const claimedOverwrite = channel.permissionOverwrites.cache.get(claimedUserId);
-        if (claimedOverwrite) {
-          await claimedOverwrite.delete('Ticket escalated and unclaimed');
+        const result = await unclaimTicket(
+          channel,
+          interaction.member,
+          true // bypass ownership/ManageChannels check
+        );
+
+        if (!result.success) {
+          return await InteractionHelper.safeEditReply(interaction, {
+            content: `Failed to unclaim ticket: ${result.error}`
+          });
+        }
+
+        const overwrite =
+          channel.permissionOverwrites.cache.get(claimedUserId);
+
+        if (overwrite) {
+          await overwrite.delete(
+            'Ticket escalated and automatically unclaimed'
+          );
         }
       }
 
@@ -97,10 +128,16 @@ export default {
       });
 
       const currentName = channel.name ?? 'ticket';
-      const newName = currentName.endsWith('mod') ? currentName : `${currentName}mod`;
+
+      const newName = currentName.endsWith('-mod')
+        ? currentName
+        : `${currentName}-mod`;
 
       if (newName !== currentName) {
-        await channel.setName(newName, 'Escalated ticket to moderation department');
+        await channel.setName(
+          newName,
+          'Escalated ticket to moderation department'
+        );
       }
 
       await channel.send({
@@ -108,13 +145,14 @@ export default {
         embeds: [
           successEmbed(
             'Ticket Escalated',
-            'This ticket has been escalated to the moderation department.'
+            'This ticket has been escalated to the moderation department and has been automatically unclaimed. A moderator may now claim it.'
           )
         ]
       });
 
       await InteractionHelper.safeEditReply(interaction, {
-        content: 'Ticket escalated successfully.'
+        content:
+          '✅ Ticket escalated successfully and automatically unclaimed.'
       });
 
       logger.info('Ticket escalated successfully', {
@@ -126,6 +164,7 @@ export default {
         guildId: interaction.guildId,
         commandName: 'escalate'
       });
+
     } catch (error) {
       logger.error('Error executing escalate command', {
         error: error.message,
@@ -141,5 +180,5 @@ export default {
         source: 'ticket_escalate_command'
       });
     }
-  },
+  }
 };
