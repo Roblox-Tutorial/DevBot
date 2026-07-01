@@ -746,24 +746,43 @@ async function generateTranscript(channel) {
 
   let content = msg.content ? escape(msg.content) : '';
 
-  if (msg.embeds.length) {
-    content += '\n[Embed]';
+  if (msg.embeds.length > 0) {
+  const embed = msg.embeds[0];
+
+  let embedText = `<div style="margin-top:6px;padding:6px;border-left:3px solid #faa61a;background:#2f3136;border-radius:4px">`;
+
+  if (embed.title) {
+    embedText += `<strong>${escape(embed.title)}</strong><br>`;
   }
+
+  if (embed.description) {
+    embedText += `<span>${escape(embed.description)}</span><br>`;
+  }
+
+  if (embed.image?.url) {
+    embedText += `<img src="${embed.image.url}" class="transcript-img">`;
+  }
+
+  embedText += `</div>`;
+
+  content += embedText;
+}
 
   if (msg.attachments.size > 0) {
-    const files = msg.attachments.map(a => {
-      const url = a.url;
+  const files = msg.attachments.map(a => {
+    const url = a.url;
 
-      if (url.match(/\.(png|jpg|jpeg|gif|webp)$/i)) {
-        return `<br><img src="${url}" class="transcript-img">`;
-      }
+    const isImage = /\.(png|jpg|jpeg|gif|webp)$/i.test(url);
 
-      return `<br><a href="${url}" target="_blank">${url}</a>`;
-    }).join('\n');
+    if (isImage) {
+      return `<img src="${url}" class="transcript-img">`;
+    }
 
-    content += `\n${files}`;
-  }
+    return `<a href="${url}" target="_blank">${url}</a>`;
+  }).join('<br>');
 
+  content += `<div style="margin-top:6px">${files}</div>`;
+}
   if (!content) content = '[No content]';
 
   return `
