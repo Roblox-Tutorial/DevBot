@@ -733,12 +733,47 @@ async function generateTranscript(channel) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
 
-    const rows = messages.map((msg) => {
-      const ts = new Date(msg.createdTimestamp).toISOString().replace('T', ' ').slice(0, 19);
-      const author = escape(msg.author?.tag ?? msg.author?.username ?? 'Unknown');
-      const content = escape(msg.content || (msg.embeds.length ? '[embed]' : '[attachment]'));
-      return `<tr><td class="ts">${ts}</td><td class="author">${author}</td><td class="msg">${content}</td></tr>`;
+   const rows = messages.map((msg) => {
+  const ts = new Date(msg.createdTimestamp)
+    .toISOString()
+    .replace('T', ' ')
+    .slice(0, 19);
+
+  const author = escape(
+  msg.author?.tag ||
+  `${msg.author?.username ?? 'Unknown'}#0000`
+);
+
+  let content = msg.content ? escape(msg.content) : '';
+
+  if (msg.embeds.length) {
+    content += '\n[Embed]';
+  }
+
+  if (msg.attachments.size > 0) {
+    const files = msg.attachments.map(a => {
+      const url = a.url;
+
+      if (url.match(/\.(png|jpg|jpeg|gif|webp)$/i)) {
+        return `<br><img src="${url}" class="transcript-img">`;
+      }
+
+      return `<br><a href="${url}" target="_blank">${url}</a>`;
     }).join('\n');
+
+    content += `\n${files}`;
+  }
+
+  if (!content) content = '[No content]';
+
+  return `
+<tr>
+  <td class="ts">${ts}</td>
+  <td class="author">${author}</td>
+  <td class="msg">${content}</td>
+</tr>
+`;
+}).join('\n');
 
     const html = `<!DOCTYPE html>
 <html lang="en">
@@ -746,29 +781,71 @@ async function generateTranscript(channel) {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Transcript – #${escape(channel.name)}</title>
+
 <style>
 body{font-family:sans-serif;background:#36393f;color:#dcddde;margin:0;padding:16px}
+
 h1{color:#fff;font-size:1.2rem;margin-bottom:8px}
-table{width:100%;border-collapse:collapse;font-size:0.85rem}
-th{background:#2f3136;color:#8e9297;padding:6px 8px;text-align:left;border-bottom:2px solid #202225}
-td{padding:4px 8px;border-bottom:1px solid #40444b;vertical-align:top}
+
+table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:0.85rem;
+  background:#2f3136;
+}
+
+th{
+  background:#202225;
+  color:#8e9297;
+  padding:6px 8px;
+  text-align:left;
+  border-bottom:2px solid #111;
+}
+
+td{
+  padding:6px 8px;
+  border-bottom:1px solid #40444b;
+  vertical-align:top;
+}
+
 .ts{color:#72767d;white-space:nowrap;width:160px}
 .author{color:#7289da;white-space:nowrap;width:160px}
-.msg{word-break:break-word}
+
+.msg{
+  word-break:break-word;
+  line-height:1.4;
+}
+
+/* 🖼 IMAGE PREVIEW */
+.transcript-img{
+  max-width:320px;
+  max-height:240px;
+  margin-top:6px;
+  border-radius:6px;
+  border:1px solid #40444b;
+  display:block;
+}
 </style>
+
 </head>
 <body>
+
 <h1>📜 Transcript – #${escape(channel.name)}</h1>
 <p style="color:#72767d">${messages.length} message(s) exported on ${new Date().toUTCString()}</p>
+
 <table>
-<thead><tr><th>Timestamp (UTC)</th><th>Author</th><th>Message</th></tr></thead>
+<thead>
+<tr><th>Timestamp (UTC)</th><th>Author</th><th>Message</th></tr>
+</thead>
+
 <tbody>
 ${rows}
 </tbody>
+
 </table>
+
 </body>
 </html>`;
-
     const buffer = Buffer.from(html, 'utf8');
     const attachment = new AttachmentBuilder(buffer, { name: `ticket-${channel.id}.html` });
 
