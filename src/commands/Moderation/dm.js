@@ -3,8 +3,8 @@ import { createEmbed, successEmbed, infoEmbed, warningEmbed } from '../../utils/
 import { logEvent } from '../../utils/moderation.js';
 import { logger } from '../../utils/logger.js';
 import { sanitizeMarkdown } from '../../utils/validation.js';
-
 import { InteractionHelper } from '../../utils/interactionHelper.js';
+
 export default {
     data: new SlashCommandBuilder()
         .setName("dm")
@@ -42,12 +42,11 @@ export default {
             return;
         }
 
-    const targetUser = interaction.options.getUser("user");
+        const targetUser = interaction.options.getUser("user");
         const message = interaction.options.getString("message");
         const anonymous = interaction.options.getBoolean("anonymous") || false;
 
         try {
-            
             if (message.length > 2000) {
                 return await replyUserError(interaction, { type: ErrorTypes.UNKNOWN, message: 'Messages must be under 2000 characters.' });
             }
@@ -58,19 +57,21 @@ export default {
 
             const sanitized = sanitizeMarkdown(message);
 
-            const dmChannel = await targetUser.createDM();
-            
-            await dmChannel.send({
-                embeds: [
-                    successEmbed(
-                        anonymous ? "Message from the Staff Team" : `Message from ${interaction.user.tag}`,
-                        sanitized
-                    ).setFooter({
-                        text: `You cannot reply to this message. | Logger ID: ${interaction.id}`
-                    })
-                ]
+            // Création de l'embed pour l'utilisateur ciblé
+            const userEmbed = successEmbed(
+                anonymous ? "Message from the Staff Team" : `Message from ${interaction.user.tag}`,
+                sanitized
+            );
+
+            // Ajout du footer directement sur l'embed généré
+            userEmbed.setFooter({
+                text: `You cannot reply to this message. | Logger ID: ${interaction.id}`
             });
 
+            const dmChannel = await targetUser.createDM();
+            await dmChannel.send({ embeds: [userEmbed] });
+
+            // Envoi des logs avec l'exécuteur et le contenu du message inclus
             await logEvent({
                 client: interaction.client,
                 guild: interaction.guild,
@@ -82,6 +83,8 @@ export default {
                     metadata: {
                         userId: targetUser.id,
                         moderatorId: interaction.user.id,
+                        moderatorTag: interaction.user.tag,
+                        messageContent: message, // Ajout du message textuel envoyé
                         anonymous,
                         messageLength: sanitized.length
                     }
@@ -99,11 +102,12 @@ export default {
         } catch (error) {
             logger.error('DM command error:', error);
             
-if (error.code === 50007) {
-                return await replyUserError(interaction, { type: ErrorTypes.UNKNOWN, message: 'Could not send a DM to ${targetUser.tag}. They may have DMs disabled.' });
+            // Correction des syntaxes de chaînes (${var}) avec des accents graves (`)
+            if (error.code === 50007) {
+                return await replyUserError(interaction, { type: ErrorTypes.UNKNOWN, message: `Could not send a DM to ${targetUser.tag}. They may have DMs disabled.` });
             }
             
-            return await replyUserError(interaction, { type: ErrorTypes.UNKNOWN, message: 'Failed to send DM: ${error.message}' });
+            return await replyUserError(interaction, { type: ErrorTypes.UNKNOWN, message: `Failed to send DM: ${error.message}` });
         }
     }
 };
