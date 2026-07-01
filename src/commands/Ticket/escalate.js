@@ -1,5 +1,5 @@
 import { getColor } from '../../config/bot.js';
-import { SlashCommandBuilder, PermissionFlagsBits, MessageFlags } from 'discord.js';
+import { SlashCommandBuilder, MessageFlags } from 'discord.js';
 import { successEmbed } from '../../utils/embeds.js';
 import { logger } from '../../utils/logger.js';
 import { handleInteractionError } from '../../utils/errorHandler.js';
@@ -9,7 +9,7 @@ import { getTicketPermissionContext } from '../../utils/ticketPermissions.js';
 export default {
   data: new SlashCommandBuilder()
     .setName("escalate")
-    .setDescription("Escalates a claimed ticket to the moderation department.")
+    .setDescription("Escalates the current ticket to the moderation department.")
     .setDMPermission(false),
 
   async execute(interaction, guildConfig, client) {
@@ -17,9 +17,7 @@ export default {
       const deferred = await InteractionHelper.safeDefer(interaction, {
         flags: MessageFlags.Ephemeral
       });
-      if (!deferred) {
-        return;
-      }
+      if (!deferred) return;
 
       const permissionContext = await getTicketPermissionContext({ client, interaction });
       if (!permissionContext.ticketData) {
@@ -39,6 +37,23 @@ export default {
 
       const supportRoleId = guildConfig?.supportRoleId || '1506631605576270004';
       const modRoleId = guildConfig?.modDepartmentRoleId || '1506843456943689798';
+      const ticketCategoryId = guildConfig?.ticketCategoryId || '1506636010866479114';
+
+      if (!channel || !guild) {
+        return await InteractionHelper.safeEditReply(interaction, {
+          content: 'This command can only be used in a guild ticket channel.'
+        });
+      }
+
+      const isTicketChannel =
+        channel.parentId === ticketCategoryId ||
+        channel.name?.toLowerCase().startsWith('ticket-');
+
+      if (!isTicketChannel) {
+        return await InteractionHelper.safeEditReply(interaction, {
+          content: 'This command can only be used in a valid ticket channel.'
+        });
+      }
 
       const supportRole = guild.roles.cache.get(supportRoleId);
       const modRole = guild.roles.cache.get(modRoleId);
@@ -55,34 +70,37 @@ export default {
         });
       }
 
-      const claimOverwrite = channel.permissionOverwrites.cache.find((overwrite) => {
-        if (overwrite.type !== 1) return false;
-        const allow = overwrite.allow?.bitfield?.toString?.() ?? '';
-        const deny = overwrite.deny?.bitfield?.toString?.() ?? '';
-        return overwrite.id !== guild.id && overwrite.id !== supportRole.id && overwrite.id !== modRole.id && (allow.length > 0 || deny.length > 0);
-      });
+      const ticketData = permissionContext.ticketData;
+      const claimedUserId =
+        ticketData.claimedBy ||
+        ticketData.claimedUserId ||
+        ticketData.claimantId ||
+        ticketData.claimed;
 
-      if (claimOverwrite) {
-        await claimOverwrite.delete('Ticket escalated and unclaimed');
+      if (claimedUserId) {
+        const claimedOverwrite = channel.permissionOverwrites.cache.get(claimedUserId);
+        if (claimedOverwrite) {
+          await claimedOverwrite.delete('Ticket escalated and unclaimed');
+        }
       }
 
       await channel.permissionOverwrites.edit(supportRole, {
         ViewChannel: false,
         SendMessages: false,
         ReadMessageHistory: false
-      }, { reason: 'Ticket escalated to moderation' });
+      });
 
       await channel.permissionOverwrites.edit(modRole, {
         ViewChannel: true,
         SendMessages: true,
         ReadMessageHistory: true
-      }, { reason: 'Ticket escalated to moderation' });
+      });
 
-      const currentName = channel.name || 'ticket';
+      const currentName = channel.name ?? 'ticket';
       const newName = currentName.endsWith('mod') ? currentName : `${currentName}mod`;
 
       if (newName !== currentName) {
-        await channel.setName(newName, 'Ticket escalated to moderation department');
+        await channel.setName(newName, 'Escalated ticket to moderation department');
       }
 
       await channel.send({
@@ -104,6 +122,7 @@ export default {
         userTag: interaction.user.tag,
         channelId: channel.id,
         channelName: channel.name,
+        claimedUserId: claimedUserId || null,
         guildId: interaction.guildId,
         commandName: 'escalate'
       });
