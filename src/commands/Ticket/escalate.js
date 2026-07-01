@@ -5,7 +5,7 @@ import { logger } from '../../utils/logger.js';
 import { handleInteractionError } from '../../utils/errorHandler.js';
 import { InteractionHelper } from '../../utils/interactionHelper.js';
 import { getTicketPermissionContext } from '../../utils/ticketPermissions.js';
-import { unclaimTicket } from '../../services/ticket.js'; // <-- adjust path if needed
+import { unclaimTicket } from '../../services/ticket.js'; // adjust path if needed
 
 export default {
   data: new SlashCommandBuilder()
@@ -52,8 +52,7 @@ export default {
 
       if (!channel || !guild) {
         return await InteractionHelper.safeEditReply(interaction, {
-          content:
-            'This command can only be used in a guild ticket channel.'
+          content: 'This command can only be used in a guild ticket channel.'
         });
       }
 
@@ -63,8 +62,7 @@ export default {
 
       if (!isTicketChannel) {
         return await InteractionHelper.safeEditReply(interaction, {
-          content:
-            'This command can only be used in a valid ticket channel.'
+          content: 'This command can only be used in a valid ticket channel.'
         });
       }
 
@@ -91,12 +89,12 @@ export default {
         ticketData.claimantId ||
         ticketData.claimed;
 
-      // Automatically force-unclaim the ticket.
+      // ✅ FORCE UNCLAIM (no permission checks)
       if (claimedUserId) {
         const result = await unclaimTicket(
           channel,
           interaction.member,
-          true // bypass ownership/ManageChannels check
+          true
         );
 
         if (!result.success) {
@@ -104,31 +102,24 @@ export default {
             content: `Failed to unclaim ticket: ${result.error}`
           });
         }
-
-        const overwrite =
-          channel.permissionOverwrites.cache.get(claimedUserId);
-
-        if (overwrite) {
-          await overwrite.delete(
-            'Ticket escalated and automatically unclaimed'
-          );
-        }
       }
 
+      // 🔒 lock support team
       await channel.permissionOverwrites.edit(supportRole, {
         ViewChannel: false,
         SendMessages: false,
         ReadMessageHistory: false
       });
 
+      // 🔓 unlock mod team
       await channel.permissionOverwrites.edit(modRole, {
         ViewChannel: true,
         SendMessages: true,
         ReadMessageHistory: true
       });
 
+      // rename ticket
       const currentName = channel.name ?? 'ticket';
-
       const newName = currentName.endsWith('-mod')
         ? currentName
         : `${currentName}-mod`;
@@ -140,19 +131,19 @@ export default {
         );
       }
 
+      // notify mods
       await channel.send({
         content: `<@&${modRole.id}>`,
         embeds: [
           successEmbed(
             'Ticket Escalated',
-            'This ticket has been escalated to the moderation department and has been automatically unclaimed. A moderator may now claim it.'
+            'This ticket has been escalated to the moderation department and automatically unclaimed. A moderator may now claim it.'
           )
         ]
       });
 
       await InteractionHelper.safeEditReply(interaction, {
-        content:
-          '✅ Ticket escalated successfully and automatically unclaimed.'
+        content: '✅ Ticket escalated successfully and unclaimed.'
       });
 
       logger.info('Ticket escalated successfully', {
