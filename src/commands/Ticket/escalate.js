@@ -5,9 +5,9 @@ import { handleInteractionError } from '../../utils/errorHandler.js';
 import { InteractionHelper } from '../../utils/interactionHelper.js';
 
 // IDs to configure for your server
-const SUPPORT_ROLE_ID = '111111111111111111';       // Support role ID
-const MOD_DEPARTMENT_ROLE_ID = '222222222222222222'; // Moderation Department role ID
-const TICKET_CATEGORY_ID = '333333333333333333';     // Ticket category ID (optional)
+const SUPPORT_ROLE_ID = '1506631605576270004';       // Support role ID
+const MOD_DEPARTMENT_ROLE_ID = '1506843456943689798'; // Moderation Department role ID
+const TICKET_CATEGORY_ID = '1506636010866479114';     // Ticket category ID (optional)
 
 export default {
   data: new SlashCommandBuilder()
