@@ -100,7 +100,7 @@ export default {
 
       // --- 3) Add letter "a" to the ticket channel name ---
       const currentName = channel.name || 'ticket';
-      const newName = currentName + 'a';
+      const newName = currentName + 'mod';
 
       await channel.setName(newName, 'Escalated ticket to moderation department');
 
@@ -108,7 +108,7 @@ export default {
       const embed = createEmbed({
         title: 'Ticket escalated'
       }).setDescription(
-        `This ticket has been escalated to ${modRole}.\nSupport has been removed from this ticket and the channel name has been updated to \`${newName}\`.`
+        `This ticket has been escalated to the ${modRole}.`
       );
 
       await channel.send({
@@ -119,7 +119,7 @@ export default {
       // --- 5) Confirm to the user who ran /escalate ---
       await InteractionHelper.safeEditReply(interaction, {
         content:
-          'Command ran successfully. The moderation department has been notified and ticket permissions/name have been updated.'
+          ''
       });
 
       logger.info('Escalate command executed', {
