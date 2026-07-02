@@ -419,7 +419,7 @@ components: []
       }
     });
 
-    const transcriptChannelId = '1521967483362480269';
+    const transcriptChannelId = '0';
 
 if (transcriptAttachment) {
   try {
