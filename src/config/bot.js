@@ -24,9 +24,9 @@ export const botConfig = {
     activities: [
       {
         // Text users will see (example: "Playing /help | Titan Bot").
-        name: "over Vibe Customers/Staff",
+        name: "Watching over Vibe Server",
         // Activity type number (0 = Playing).
-        type: 3,
+        type: 4,
       },
     ],
   },
