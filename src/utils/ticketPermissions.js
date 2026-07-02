@@ -18,7 +18,7 @@ export async function getTicketPermissionContext({ client, interaction }) {
   );
 
   const staffRoleId = config.ticketStaffRoleId || null;
-  const modRoleId = '1506843456943689798';
+  const modRoleId = '1522048052096139416';
 
   const hasTicketStaffRole = Boolean(
     staffRoleId && interaction.member.roles?.cache?.has(staffRoleId)
