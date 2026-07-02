@@ -265,8 +265,6 @@ if (supportRoleId) {
 
 let transcriptAttachment = null;;
 
-    let transcriptAttachment = null;
-
 try {
   transcriptAttachment = await generateTranscript(channel);
 } catch (error) {
