@@ -8,7 +8,7 @@ export default {
   data: new SlashCommandBuilder()
     .setName("userinfo")
     .setDescription("Get detailed information about a user")
-    .addUserOption((option) =>
+    .addUserOption(option =>
       option
         .setName("target")
         .setDescription("The user to inspect (defaults to you)")
@@ -19,36 +19,48 @@ export default {
       const deferSuccess = await InteractionHelper.safeDefer(interaction);
 
       if (!deferSuccess) {
-        logger.warn(`UserInfo interaction defer failed`, {
+        logger.warn("UserInfo interaction defer failed", {
           userId: interaction.user.id,
           guildId: interaction.guildId,
-          commandName: 'userinfo'
+          commandName: "userinfo"
         });
         return;
       }
 
       const user = interaction.options.getUser("target") || interaction.user;
-      const member = interaction.guild.members.cache.get(user.id);
+
+      // Fetch member to ensure roles are up to date
+      const member = await interaction.guild.members.fetch(user.id).catch(() => null);
 
       const createdTimestamp = Math.floor(user.createdAt.getTime() / 1000);
       const joinedTimestamp = member?.joinedAt
         ? Math.floor(member.joinedAt.getTime() / 1000)
         : null;
 
-      // Only allow company rank roles
+      // Company rank roles only
       const isCompanyRank = (roleName) => {
         return (
           /^\d+\s*\|/.test(roleName) ||     // e.g. 255 | Chairman
-          roleName.startsWith("HO |") ||    // HO | Head Office
+          roleName.startsWith("HO |") ||
+          roleName.startsWith("🌸") ||// HO | Head Office
           roleName.startsWith("BOA |")      // BOA | Board Of Directors
         );
       };
 
-      // Find the highest company rank based on Discord role hierarchy
+      // Highest company rank
       const highestCompanyRole = member?.roles.cache
+        .filter(role => role.name !== "@everyone")
         .filter(role => isCompanyRank(role.name))
         .sort((a, b) => b.position - a.position)
         .first();
+
+      // All roles (mentioned), highest → lowest
+      const roles =
+        member?.roles.cache
+          .filter(role => role.name !== "@everyone")
+          .sort((a, b) => b.position - a.position)
+          .map(role => role.toString())
+          .join(", ") || "None";
 
       const embed = createEmbed({
         title: `User Info: ${user.username}`
@@ -57,66 +69,62 @@ export default {
         .addFields(
           {
             name: "ID",
-            value: user.id,
-            inline: true,
+            value: `\`${user.id}\``,
+            inline: true
           },
           {
             name: "Bot",
             value: user.bot ? "Yes" : "No",
-            inline: true,
+            inline: true
           },
           {
-            name: "Roles",
-            value:
-              member && member.roles.cache.size > 1
-                ? member.roles.cache
-                    .filter(role => role.name !== "@everyone")
-                    .map(role => role.name)
-                    .join(", ")
-                : "None",
-            inline: false,
+            name: "Highest Role",
+            value: highestCompanyRole
+              ? highestCompanyRole.toString()
+              : "None",
+            inline: true
           },
           {
             name: "Account Created",
-            value: `<t:${createdTimestamp}:R>`,
-            inline: false,
+            value: `<t:${createdTimestamp}:F>\n(<t:${createdTimestamp}:R>)`,
+            inline: false
           },
           {
             name: "Joined Server",
             value: joinedTimestamp
-              ? `<t:${joinedTimestamp}:R>`
-              : "Not in server",
-            inline: false,
+              ? `<t:${joinedTimestamp}:F>\n(<t:${joinedTimestamp}:R>)`
+              : "Not in this server",
+            inline: false
           },
           {
-            name: "Highest Role",
-            value: highestCompanyRole?.name || "None",
-            inline: true,
-          },
+            name: "Roles",
+            value: roles,
+            inline: false
+          }
         );
 
       await InteractionHelper.safeEditReply(interaction, {
-        embeds: [embed],
+        embeds: [embed]
       });
 
-      logger.info(`UserInfo command executed`, {
+      logger.info("UserInfo command executed", {
         userId: interaction.user.id,
         targetUserId: user.id,
-        guildId: interaction.guildId,
+        guildId: interaction.guildId
       });
 
     } catch (error) {
-      logger.error(`UserInfo command execution failed`, {
+      logger.error("UserInfo command execution failed", {
         error: error.message,
         stack: error.stack,
         userId: interaction.user.id,
         guildId: interaction.guildId,
-        commandName: 'userinfo'
+        commandName: "userinfo"
       });
 
       await handleInteractionError(interaction, error, {
-        commandName: 'userinfo',
-        source: 'userinfo_command'
+        commandName: "userinfo",
+        source: "userinfo_command"
       });
     }
   },
