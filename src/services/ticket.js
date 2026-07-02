@@ -1007,13 +1007,19 @@ export async function deleteTicket(channel, deleter) {
         }
 
         try {
+          // Remove the ticket from the database first.
+          await deleteTicketData(channel.guild.id, channel.id);
+
+          // Then delete the Discord channel.
           await channel.delete('Ticket deleted permanently');
-          logger.info('✅ Channel deleted', {
+
+          logger.info('✅ Ticket database entry and channel deleted', {
             channelId: channel.id,
             channelName: channel.name,
             ticketNumber: ticketData.id
           });
         } catch (deleteError) {
+          
           logger.error('❌ Failed to delete ticket channel:', {
             channelId: channel.id,
             channelName: channel.name,
