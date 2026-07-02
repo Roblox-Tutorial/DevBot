@@ -252,6 +252,19 @@ export async function closeTicket(channel, closer, reason = 'No reason provided'
     
     await saveTicketData(channel.guild.id, channel.id, ticketData);
 
+// Hide the support role from the closed ticket
+const supportRoleId = config.ticketStaffRoleId; // Replace with the correct config field
+
+if (supportRoleId) {
+  await channel.permissionOverwrites.edit(supportRoleId, {
+    ViewChannel: false,
+  }).catch(error => {
+    logger.warn(`Failed to hide role ${supportRoleId}: ${error.message}`);
+  });
+}
+
+let transcriptAttachment = null;;
+
     let transcriptAttachment = null;
 
 try {
