@@ -42,7 +42,6 @@ export async function getTicketPermissionContext({ client, interaction }) {
     canManageTicket: hasManageChannels || hasTicketStaffRole || hasModRole,
 
     canCloseTicket:
-      hasManageChannels ||
       hasModRole ||
       isTicketCreator,
   };
